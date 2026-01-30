@@ -40,6 +40,8 @@ const state = {
   transferEvents: [],
   tournamentStartEvent: null,
   finalTableEvent: null,
+  championEvent: null,
+  tournamentEndEvent: null,
 };
 
 const elements = {
@@ -203,6 +205,8 @@ function loadState() {
     if (!Array.isArray(state.transferEvents)) state.transferEvents = [];
     if (state.tournamentStartEvent && typeof state.tournamentStartEvent !== "object") state.tournamentStartEvent = null;
     if (state.finalTableEvent && typeof state.finalTableEvent !== "object") state.finalTableEvent = null;
+    if (state.championEvent && typeof state.championEvent !== "object") state.championEvent = null;
+    if (state.tournamentEndEvent && typeof state.tournamentEndEvent !== "object") state.tournamentEndEvent = null;
   } catch (error) {
     console.warn("Nao foi possivel carregar o estado salvo.");
   }
@@ -315,10 +319,6 @@ function getNextLevel() {
 function openDisplayWindow() {
   const displayWindow = window.open("", "pokerDisplay", "width=1100,height=650");
   if (!displayWindow) return;
-  const baseUrl = window.location.origin + window.location.pathname
-    + (window.location.search ? window.location.search + "&" : "?");
-  const mesasWindowUrl = baseUrl + "view=tables";
-  const rebuyWindowUrl = baseUrl + "view=rebuy";
 
   const html = `<!DOCTYPE html>
   <html lang="pt-BR">
@@ -469,12 +469,16 @@ function openDisplayWindow() {
           font-size: 11px;
         }
         .btn.primary {
-          background: #ffcc33;
-          color: #111;
+          background: #ffcc33 !important;
+          color: #111 !important;
         }
         .btn.secondary {
-          background: #2f364a;
-          color: #f2f2f2;
+          background: #2f364a !important;
+          color: #f2f2f2 !important;
+        }
+        .btn:disabled {
+          opacity: 0.65;
+          cursor: not-allowed;
         }
         .btn.danger {
           background: #c43a3a;
@@ -541,15 +545,14 @@ function openDisplayWindow() {
             <div class="next-block"><div class="next" id="dNext">Próximo: -</div></div>
             <div class="section-line"></div>
             <div class="controls">
-              <button class="btn primary" data-command="start">Iniciar</button>
-              <button class="btn secondary" data-command="pause">Pausar</button>
+              <button type="button" id="dStart" class="btn primary" data-command="start">Iniciar</button>
+              <button type="button" id="dPause" class="btn secondary" data-command="pause" disabled>Pausar</button>
+              <button type="button" id="dContinue" class="btn secondary" data-command="continue" disabled>Continuar</button>
               <button class="btn secondary" data-command="edit">Editar cronometro</button>
               <button class="btn secondary" data-command="restart">Reiniciar Rodada</button>
               <button class="btn secondary" data-command="prev">Rodada Anterior</button>
               <button class="btn secondary" data-command="next">Proxima Rodada</button>
               <button class="btn danger" data-command="reset">Reset</button>
-              <button type="button" id="dOpenMesas" class="btn primary" title="Abrir tela Mesas em nova janela">Mesas</button>
-              <button type="button" id="dOpenRebuy" class="btn primary" title="Abrir tela Rebuy / Add-on / Eliminado em nova janela">Rebuy / Add-on / Eliminado</button>
             </div>
           </div>
         </div>
@@ -568,8 +571,6 @@ function openDisplayWindow() {
       <script>
         const STORAGE_KEY = "${STORAGE_KEY}";
         const COMMAND_KEY = "${COMMAND_KEY}";
-        const MESAS_WINDOW_URL = "${mesasWindowUrl.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}";
-        const REBUY_WINDOW_URL = "${rebuyWindowUrl.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}";
         function formatTime(seconds) {
           const mins = String(Math.floor(seconds / 60)).padStart(2, "0");
           const secs = String(seconds % 60).padStart(2, "0");
@@ -750,6 +751,20 @@ function openDisplayWindow() {
               </div>
             \`).join("")
             : \`<span class="muted">Sem premiacao salva.</span>\`;
+          const dStartEl = document.getElementById("dStart");
+          const dPauseEl = document.getElementById("dPause");
+          const dContinueEl = document.getElementById("dContinue");
+          if (dStartEl) {
+            dStartEl.disabled = state.clockRunning || !!state.tournamentStartTs;
+          }
+          if (dPauseEl) {
+            dPauseEl.disabled = !state.clockRunning;
+            dPauseEl.classList.remove("primary", "secondary");
+            dPauseEl.classList.add(state.clockRunning ? "primary" : "secondary");
+          }
+          if (dContinueEl) {
+            dContinueEl.disabled = state.clockRunning || !state.tournamentStartTs;
+          }
         }
         function parseTimeString(value) {
           const match = value.trim().match(/^(\\d{1,3}):([0-5]\\d)$/);
@@ -787,31 +802,13 @@ function openDisplayWindow() {
                 return;
               }
               dispatchCommand(command, parsed);
+              setTimeout(update, 80);
               return;
             }
             dispatchCommand(command);
+            setTimeout(update, 80);
           });
         });
-        const openMesasBtn = document.getElementById("dOpenMesas");
-        if (openMesasBtn) {
-          openMesasBtn.addEventListener("click", () => {
-            try {
-              window.open(MESAS_WINDOW_URL, "pokerMesas", "width=900,height=750,scrollbars=yes,resizable=yes");
-            } catch (e) {
-              window.alert("Nao foi possivel abrir a janela Mesas. Verifique se o bloqueador de pop-ups esta desativado.");
-            }
-          });
-        }
-        const openRebuyBtn = document.getElementById("dOpenRebuy");
-        if (openRebuyBtn) {
-          openRebuyBtn.addEventListener("click", () => {
-            try {
-              window.open(REBUY_WINDOW_URL, "pokerRebuy", "width=900,height=750,scrollbars=yes,resizable=yes");
-            } catch (e) {
-              window.alert("Nao foi possivel abrir a janela Rebuy. Verifique se o bloqueador de pop-ups esta desativado.");
-            }
-          });
-        }
         update();
         setInterval(update, 1000);
         window.addEventListener("storage", update);
@@ -828,6 +825,7 @@ function handleCommand(payload) {
   const command = typeof payload === "string" ? payload : payload.command;
   if (command === "start") startClock();
   if (command === "pause") pauseClock();
+  if (command === "continue") startClock();
   if (command === "prev") setLevel(state.currentLevelIndex - 1);
   if (command === "next") setLevel(state.currentLevelIndex + 1);
   if (command === "reset") resetTournamentClock();
@@ -871,6 +869,8 @@ function resetTournamentData() {
   state.transferEvents = [];
   state.tournamentStartEvent = null;
   state.finalTableEvent = null;
+  state.championEvent = null;
+  state.tournamentEndEvent = null;
 }
 
 function applyConfigData(data) {
@@ -915,6 +915,8 @@ function applyConfigData(data) {
   state.transferEvents = [];
   state.tournamentStartEvent = null;
   state.finalTableEvent = null;
+  state.championEvent = null;
+  state.tournamentEndEvent = null;
   initializeFormValues();
   renderLevels();
   renderPlayers();
@@ -1290,6 +1292,8 @@ function restartTournament() {
   state.transferEvents = [];
   state.tournamentStartEvent = null;
   state.finalTableEvent = null;
+  state.championEvent = null;
+  state.tournamentEndEvent = null;
   (state.players || []).forEach((player) => {
     player.rebuys = 0;
     player.addons = 0;
@@ -1298,7 +1302,10 @@ function restartTournament() {
     player.eliminated = false;
     player.eliminatedAt = null;
     player.eliminatedLevel = null;
+    player.eliminatedLevelDuration = null;
+    player.eliminatedSecondsRemaining = null;
     player.eliminatedRank = null;
+    player.champion = false;
     player.tableNumber = null;
     player.tableSeat = null;
   });
@@ -1425,20 +1432,20 @@ function saveValues() {
 function renderLevels() {
   elements.levelsList.innerHTML = "";
   if (state.levels.length === 0) {
-    elements.levelsList.innerHTML = `<span class="muted">Nenhum nivel cadastrado.</span>`;
+    elements.levelsList.innerHTML = `<span class="muted">Nenhuma rodada cadastrada.</span>`;
     return;
   }
   state.levels.forEach((level, index) => {
     const item = document.createElement("div");
     item.className = "row";
-    const label = level.isBreak ? "Intervalo" : `Nivel ${index + 1}`;
+    const label = level.isBreak ? "Intervalo" : `Rodada ${index + 1}`;
     const blinds = level.isBreak ? "Pausa" : `${formatNumber(level.small)} / ${formatNumber(level.big)}`;
     const isBreakChecked = level.isBreak ? "checked" : "";
     const disableBlinds = level.isBreak ? "disabled" : "";
     item.innerHTML = `
       <div class="level-header">
         <strong>${label}</strong>
-        <button data-action="use" data-index="${index}" class="secondary small">Ir para nivel</button>
+        <button data-action="use" data-index="${index}" class="secondary small">Ir para rodada</button>
       </div>
       <span class="badge">${blinds}</span>
       <div class="level-inline">
@@ -1557,14 +1564,16 @@ function renderRebuyList() {
   );
   sortedPlayers.forEach((player) => {
     const item = document.createElement("div");
-    item.className = "row rebuy-row";
+    const isEliminated = Boolean(player.eliminated);
+    const isChampion = Boolean(player.champion);
+    const disableButtons = isEliminated || isChampion;
+    item.className = "row rebuy-row" + (disableButtons ? " eliminated-row" : "");
     const rebuyLimit = Number(state.rebuyLimit);
     const addonLimit = Number(state.addonLimit);
-    const isEliminated = Boolean(player.eliminated);
     const statusClass = player.paid ? "paid" : "pending";
     const statusLabel = player.paid ? "Pago" : "Pendente";
-    const canRebuyAdd = !isEliminated && (rebuyLimit <= 0 || player.rebuys < rebuyLimit);
-    const canAddonAdd = !isEliminated && (addonLimit <= 0 || player.addons < addonLimit);
+    const canRebuyAdd = !disableButtons && (rebuyLimit <= 0 || player.rebuys < rebuyLimit);
+    const canAddonAdd = !disableButtons && (addonLimit <= 0 || player.addons < addonLimit);
     const canRebuyRemove = player.rebuys > 0;
     const canAddonRemove = player.addons > 0;
     const rebuyLimitText = rebuyLimit > 0 ? formatInteger(rebuyLimit) : "0";
@@ -1579,24 +1588,29 @@ function renderRebuyList() {
       : "--:--";
     const tableLabel = formatTableLabel(player.tableNumber);
     const eliminatedInfo = isEliminated
-      ? `Eliminado na rodada ${player.eliminatedLevel || "-"} às ${eliminatedTime} - Mesa ${player.tableNumber || "-"}`
-      : "Nao eliminado";
+      ? `Eliminado na rodada ${player.eliminatedLevel || "-"} às ${eliminatedTime} - ${tableLabel}`
+      : player.champion
+        ? "1º lugar - Campeão"
+        : "Nao eliminado";
     const placementInfo = isEliminated && player.eliminatedRank
       ? `Classificacao: ${player.eliminatedRank}º`
-      : "";
+      : player.champion
+        ? `Classificacao: 1º`
+        : "";
     item.innerHTML = `
       <div class="rebuy-info">
         <strong class="${isEliminated ? "eliminated-name" : ""}">${player.name}</strong>
+        ${player.champion ? '<span class="pill" style="background:#eab308;color:#111;margin-left:6px;">CAMPEÃO</span>' : ""}
         <span class="muted">Mesa: ${tableLabel} | Rebuys: ${rebuyText} | Add-ons: ${addonText}</span>
         <span class="muted">${eliminatedInfo}</span>
         ${placementInfo ? `<span class="muted">${placementInfo}</span>` : ""}
       </div>
       <div class="row-actions">
-        <button data-action="rebuy-add" data-id="${player.id}" ${isEliminated ? "disabled" : canRebuyAdd ? "" : "disabled"}>Rebuy +</button>
-        <button data-action="rebuy-remove" data-id="${player.id}" class="warning" ${isEliminated ? "disabled" : canRebuyRemove ? "" : "disabled"}>Rebuy -</button>
-        <button data-action="addon-add" data-id="${player.id}" ${isEliminated ? "disabled" : canAddonAdd ? "" : "disabled"}>Add-on +</button>
-        <button data-action="addon-remove" data-id="${player.id}" class="warning" ${isEliminated ? "disabled" : canAddonRemove ? "" : "disabled"}>Add-on -</button>
-        <button data-action="eliminate" data-id="${player.id}" class="danger" ${isEliminated ? "disabled" : ""}>Eliminado</button>
+        <button data-action="rebuy-add" data-id="${player.id}" ${disableButtons ? "disabled" : canRebuyAdd ? "" : "disabled"}>Rebuy +</button>
+        <button data-action="rebuy-remove" data-id="${player.id}" class="warning" ${disableButtons ? "disabled" : canRebuyRemove ? "" : "disabled"}>Rebuy -</button>
+        <button data-action="addon-add" data-id="${player.id}" ${disableButtons ? "disabled" : canAddonAdd ? "" : "disabled"}>Add-on +</button>
+        <button data-action="addon-remove" data-id="${player.id}" class="warning" ${disableButtons ? "disabled" : canAddonRemove ? "" : "disabled"}>Add-on -</button>
+        <button data-action="eliminate" data-id="${player.id}" class="danger" ${disableButtons ? "disabled" : ""}>Eliminado</button>
       </div>
     `;
     elements.rebuyList.appendChild(item);
@@ -1623,6 +1637,12 @@ function renderEvents() {
   }
   if (state.finalTableEvent) {
     events.push(state.finalTableEvent);
+  }
+  if (state.championEvent) {
+    events.push(state.championEvent);
+  }
+  if (state.tournamentEndEvent) {
+    events.push(state.tournamentEndEvent);
   }
   (state.transferEvents || []).forEach((evt) => {
     events.push({ ...evt, type: "transfer", typeLabel: "Transferência" });
@@ -1659,8 +1679,8 @@ function renderEvents() {
         playerName: player.name,
         tableNumber: player.tableNumber,
         level: player.eliminatedLevel,
-        levelDuration: null,
-        secondsRemaining: null,
+        levelDuration: player.eliminatedLevelDuration ?? null,
+        secondsRemaining: player.eliminatedSecondsRemaining ?? null,
         timestamp: player.eliminatedAt,
         rank: player.eliminatedRank,
       });
@@ -1689,6 +1709,35 @@ function renderEvents() {
         <div class="rebuy-info">
           <span class="pill event-pill event-pill-tournament-start">${evt.typeLabel}</span>
           <span class="muted">Horário: ${hora}</span>
+        </div>
+      `;
+    } else if (evt.type === "champion") {
+      const rodada = evt.level != null ? String(evt.level) : "-";
+      const tempoRodada =
+        evt.secondsRemaining != null && evt.levelDuration != null
+          ? `${formatTime(evt.secondsRemaining)} restantes (${evt.levelDuration} min)`
+          : evt.levelDuration != null
+            ? `${evt.levelDuration} min`
+            : "-";
+      item.innerHTML = `
+        <div class="rebuy-info">
+          <span class="pill event-pill event-pill-champion">${evt.typeLabel}</span>
+          <strong>1º lugar - ${evt.playerName}</strong>
+          <span class="muted">Rodada: ${rodada} · ${tempoRodada} · ${hora}</span>
+        </div>
+      `;
+    } else if (evt.type === "tournament-end") {
+      const rodada = evt.level != null ? String(evt.level) : "-";
+      const tempoRodada =
+        evt.secondsRemaining != null && evt.levelDuration != null
+          ? `${formatTime(evt.secondsRemaining)} restantes (${evt.levelDuration} min)`
+          : evt.levelDuration != null
+            ? `${evt.levelDuration} min`
+            : "-";
+      item.innerHTML = `
+        <div class="rebuy-info">
+          <span class="pill event-pill event-pill-tournament-end">${evt.typeLabel}</span>
+          <span class="muted">Rodada: ${rodada} · ${tempoRodada} · ${hora}</span>
         </div>
       `;
     } else if (evt.type === "final-table") {
@@ -1852,8 +1901,8 @@ function renderPayouts() {
   }
 
   if (elements.prizeWinners) {
-    const activePlayers = state.players.filter((player) => !player.eliminated).length;
-    const maxWinners = Math.max(0, activePlayers);
+    const totalParticipants = state.players.length;
+    const maxWinners = Math.max(0, totalParticipants);
     const options = [];
     for (let i = 1; i <= maxWinners; i += 1) {
       options.push(`<option value="${i}">${i}</option>`);
@@ -3032,12 +3081,47 @@ function bindEvents() {
         }
       }
       if (button.dataset.action === "eliminate" && !isEliminated) {
+        if (typeof computeSecondsRemainingFromClock === "function") computeSecondsRemainingFromClock();
+        const level = state.levels[state.currentLevelIndex];
+        const levelDuration = level ? level.duration : 0;
+        const secondsRemaining = typeof state.secondsRemaining === "number" ? state.secondsRemaining : 0;
         player.eliminated = true;
         player.eliminatedAt = Date.now();
         player.eliminatedLevel = state.currentLevelIndex + 1;
+        player.eliminatedLevelDuration = levelDuration;
+        player.eliminatedSecondsRemaining = secondsRemaining;
         const totalPlayers = state.players.length;
         const eliminatedCount = state.players.filter((p) => p.eliminated).length;
         player.eliminatedRank = totalPlayers - eliminatedCount + 1;
+        if (eliminatedCount === totalPlayers - 1) {
+          const champion = state.players.find((p) => !p.eliminated);
+          if (champion) {
+            champion.champion = true;
+            if (typeof computeSecondsRemainingFromClock === "function") computeSecondsRemainingFromClock();
+            const level = state.levels[state.currentLevelIndex];
+            const levelDuration = level ? level.duration : 0;
+            const secondsRemaining = typeof state.secondsRemaining === "number" ? state.secondsRemaining : 0;
+            const ts = Date.now();
+            state.championEvent = {
+              type: "champion",
+              typeLabel: "Campeão",
+              playerName: champion.name,
+              level: state.currentLevelIndex + 1,
+              levelDuration,
+              secondsRemaining,
+              timestamp: ts,
+            };
+            state.tournamentEndEvent = {
+              type: "tournament-end",
+              typeLabel: "Encerramento do torneio",
+              level: state.currentLevelIndex + 1,
+              levelDuration,
+              secondsRemaining,
+              timestamp: ts,
+            };
+            pauseClock();
+          }
+        }
       }
       renderPlayers();
       renderRebuyList();

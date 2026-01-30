@@ -13,16 +13,16 @@
         <p></p>
       </div>
       <div id="navButtons" class="nav-buttons">
-        <button class="nav-btn active" data-view="home">Tela inicial</button>
-        <button class="nav-btn" data-view="settings">Configuracoes</button>
+        <button class="nav-btn active" data-view="home">Início</button>
+        <button class="nav-btn" data-view="settings">Configurações</button>
         <button class="nav-btn" data-view="values">Valores</button>
         <button class="nav-btn" data-view="players">Cadastrar Participantes</button>
         <button class="nav-btn" data-view="tables">Mesas</button>
         <button class="nav-btn" data-view="rebuy">Rebuy / Add-on / Eliminado</button>
-        <button class="nav-btn" data-view="events">Eventos do torneio</button>
+        <button class="nav-btn" data-view="events">Eventos</button>
         <button class="nav-btn" data-view="payouts">Premiação</button>
         <button class="nav-btn" data-view="history">Campeões</button>
-        <button class="nav-btn" data-view="admin">Admin</button>
+        <button class="nav-btn" data-view="admin">Adm</button>
       </div>
     </header>
 
@@ -98,7 +98,7 @@
 
       <section class="view" data-view="settings">
         <div class="card">
-          <h2>Configuracoes do torneio</h2>
+          <h2>Configurações do Torneio</h2>
           <div class="grid two">
             <label>
               Nome do torneio
@@ -106,7 +106,7 @@
             </label>
           </div>
 
-          <h3>Niveis e intervalos</h3>
+          <h3>Rodadas e Intervalo</h3>
           <div class="level-form">
             <label>
               Small blind
@@ -124,7 +124,7 @@
               <input id="blindBreak" type="checkbox" />
               Intervalo
             </label>
-            <button id="addLevel" class="secondary">Adicionar</button>
+            <button id="addLevel" class="primary">Adicionar</button>
           </div>
           <div id="levelsList" class="row-list"></div>
         </div>
@@ -379,7 +379,7 @@
           </div>
           <div class="history-form">
             <label>
-              Exportar Configuracoes (Niveis, Tempo, Blinds, Valores)
+              Exportar Configuracoes (Rodadas, Tempo, Blinds, Valores)
               <input type="text" value="Gerar arquivo .json" disabled />
             </label>
             <button id="exportConfigAdmin" class="secondary">Exportar</button>

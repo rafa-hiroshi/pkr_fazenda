@@ -145,10 +145,11 @@ button.secondary:disabled {
   white-space: nowrap;
 }
 
-.eliminated-row button {
-  background: #4a5568;
-  color: #cbd5e1;
+.eliminated-row .row-actions button {
+  background: #4a5568 !important;
+  color: #cbd5e1 !important;
   cursor: not-allowed;
+  opacity: 0.9;
 }
 
 .eliminated-name {
@@ -787,6 +788,12 @@ button.small {
 }
 .event-pill.event-pill-final-table {
   background: #9333ea;
+}
+.event-pill.event-pill-champion {
+  background: #eab308;
+}
+.event-pill.event-pill-tournament-end {
+  background: #64748b;
 }
 
 .muted {
