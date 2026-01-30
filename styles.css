@@ -346,6 +346,25 @@ button.btn-active {
   color: #111;
 }
 
+.primary:disabled {
+  background: #4a5568;
+  color: #cbd5e1;
+  cursor: not-allowed;
+  opacity: 0.9;
+}
+
+.btn-success {
+  background: #3b82f6;
+  color: #fff;
+}
+
+.btn-success:disabled {
+  background: #4a5568;
+  color: #cbd5e1;
+  cursor: not-allowed;
+  opacity: 0.9;
+}
+
 .nav-btn {
   background: #2f364a;
   color: #f2f2f2;
@@ -746,6 +765,28 @@ button.small {
 
 .pill.pending {
   background: #7c5b2d;
+}
+
+.event-pill.event-pill-rebuy {
+  background: #2563eb;
+}
+.event-pill.event-pill-addon {
+  background: #7c3aed;
+}
+.event-pill.event-pill-eliminated {
+  background: #c43a3a;
+}
+.event-pill.event-pill-tables {
+  background: #0d9488;
+}
+.event-pill.event-pill-transfer {
+  background: #ea580c;
+}
+.event-pill.event-pill-tournament-start {
+  background: #16a34a;
+}
+.event-pill.event-pill-final-table {
+  background: #9333ea;
 }
 
 .muted {

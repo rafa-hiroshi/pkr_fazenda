@@ -19,6 +19,7 @@
         <button class="nav-btn" data-view="players">Cadastrar Participantes</button>
         <button class="nav-btn" data-view="tables">Mesas</button>
         <button class="nav-btn" data-view="rebuy">Rebuy / Add-on / Eliminado</button>
+        <button class="nav-btn" data-view="events">Eventos do torneio</button>
         <button class="nav-btn" data-view="payouts">Premiação</button>
         <button class="nav-btn" data-view="history">Campeões</button>
         <button class="nav-btn" data-view="admin">Admin</button>
@@ -45,7 +46,10 @@
 
         <div id="dashboardScreen" class="card clock-card">
           <div class="form-actions form-actions-between">
-            <button id="openDisplay" class="primary">MOSTRAR PAINEL</button>
+            <div class="form-actions">
+              <button id="startTournament" class="btn-success">INICIAR TORNEIO</button>
+              <button id="openDisplay" class="primary">MOSTRAR PAINEL</button>
+            </div>
             <button id="backToStart" class="secondary">Voltar para iniciar</button>
           </div>
           <div class="clock-display">
@@ -60,6 +64,10 @@
             <div>
               <span class="label">Tempo</span>
               <strong id="clockTime">15:00</strong>
+            </div>
+            <div>
+              <span class="label">Horário início</span>
+              <strong id="clockStartTime">--:--</strong>
             </div>
           </div>
           <div class="summary">
@@ -212,6 +220,7 @@
             <button id="randomTables" class="secondary">Sortear mesas</button>
             <button id="viewTables" class="secondary">Ver mesas</button>
             <button id="transferTables" class="secondary">Transferir mesa</button>
+            <button id="createFinalTable" class="btn-success">Criar Mesa Final</button>
           </div>
           <div id="transferFields" class="hidden">
             <div class="grid two">
@@ -219,7 +228,6 @@
                 Mesa origem
                 <div class="tables-controls">
                   <select id="transferSource"></select>
-                  <button id="createFinalTable" class="primary">Criar Mesa Final</button>
                 </div>
               </label>
             </div>
@@ -305,6 +313,14 @@
         </div>
       </section>
 
+      <section class="view" data-view="events">
+        <div class="card">
+          <h2>Eventos do torneio</h2>
+          <p class="muted">Timeline de rebuys, add-ons e eliminações (mesa, rodada, tempo e horário).</p>
+          <div id="eventsList" class="row-list"></div>
+        </div>
+      </section>
+
       <section class="view" data-view="history">
         <div class="card">
           <h2>Relação dos Ganhadores</h2>
@@ -315,6 +331,10 @@
       <section class="view" data-view="admin">
         <div class="card">
           <h2>Admin - Historico</h2>
+          <div class="history-form">
+            <button id="restartTournament" class="danger">Reiniciar torneio</button>
+            <p class="muted" style="margin-top: 8px;">Zera cronômetro, rodada, rebuys, add-ons, mesas e eventos. Mantém participantes e configurações.</p>
+          </div>
           <div class="history-form">
             <label>
               Titulo

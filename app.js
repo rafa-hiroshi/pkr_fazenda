@@ -36,6 +36,10 @@ const state = {
   elapsedSeconds: 0,
   lastStartTs: null,
   levelEndTs: null,
+  tableAssignmentEvent: null,
+  transferEvents: [],
+  tournamentStartEvent: null,
+  finalTableEvent: null,
 };
 
 const elements = {
@@ -46,6 +50,7 @@ const elements = {
   clockLevel: document.getElementById("clockLevel"),
   clockBlinds: document.getElementById("clockBlinds"),
   clockTime: document.getElementById("clockTime"),
+  clockStartTime: document.getElementById("clockStartTime"),
   clockStart: document.getElementById("clockStart"),
   clockPause: document.getElementById("clockPause"),
   clockEdit: document.getElementById("clockEdit"),
@@ -106,6 +111,7 @@ const elements = {
   playersList: document.getElementById("playersList"),
   playersCount: document.getElementById("playersCount"),
   rebuyList: document.getElementById("rebuyList"),
+  eventsList: document.getElementById("eventsList"),
   summaryTournament: document.getElementById("summaryTournament"),
   summaryBuyin: document.getElementById("summaryBuyin"),
   summaryRebuy: document.getElementById("summaryRebuy"),
@@ -127,6 +133,7 @@ const elements = {
   historyValues: document.getElementById("historyValues"),
   historyPlacement: document.getElementById("historyPlacement"),
   addHistory: document.getElementById("addHistory"),
+  restartTournament: document.getElementById("restartTournament"),
   historyList: document.getElementById("historyList"),
   historyYears: document.getElementById("historyYears"),
   historyDetails: document.getElementById("historyDetails"),
@@ -136,6 +143,7 @@ const elements = {
   startScreen: document.getElementById("startScreen"),
   dashboardScreen: document.getElementById("dashboardScreen"),
   backToStart: document.getElementById("backToStart"),
+  startTournament: document.getElementById("startTournament"),
   openDisplay: document.getElementById("openDisplay"),
   importConfigFile: document.getElementById("importConfigFile"),
   importConfigBtn: document.getElementById("importConfigBtn"),
@@ -188,6 +196,13 @@ function loadState() {
   try {
     const parsed = JSON.parse(saved);
     Object.assign(state, parsed);
+    (state.players || []).forEach((p) => {
+      if (!Array.isArray(p.rebuyEvents)) p.rebuyEvents = [];
+      if (!Array.isArray(p.addonEvents)) p.addonEvents = [];
+    });
+    if (!Array.isArray(state.transferEvents)) state.transferEvents = [];
+    if (state.tournamentStartEvent && typeof state.tournamentStartEvent !== "object") state.tournamentStartEvent = null;
+    if (state.finalTableEvent && typeof state.finalTableEvent !== "object") state.finalTableEvent = null;
   } catch (error) {
     console.warn("Nao foi possivel carregar o estado salvo.");
   }
@@ -234,6 +249,13 @@ function updateHomeView() {
   if (elements.navButtonsContainer) {
     elements.navButtonsContainer.classList.toggle("hidden", !state.started);
   }
+  updateStartTournamentButton();
+}
+
+function updateStartTournamentButton() {
+  const validated = !!state.tableAssignmentEvent;
+  if (elements.startTournament) elements.startTournament.disabled = validated;
+  if (elements.openDisplay) elements.openDisplay.disabled = !validated;
 }
 
 function exportConfig() {
@@ -739,6 +761,16 @@ function openDisplayWindow() {
         function sendCommand(command, value) {
           localStorage.setItem(COMMAND_KEY, JSON.stringify({ command, value, ts: Date.now() }));
         }
+        function dispatchCommand(command, value) {
+          try {
+            if (window.opener && typeof window.opener.handleCommand === "function") {
+              window.opener.handleCommand(value != null ? { command, value } : { command });
+              return true;
+            }
+          } catch (e) {}
+          sendCommand(command, value);
+          return false;
+        }
         document.querySelectorAll("[data-command]").forEach((button) => {
           button.addEventListener("click", () => {
             const command = button.dataset.command;
@@ -754,10 +786,10 @@ function openDisplayWindow() {
                 window.alert("Formato invalido. Use mm:ss, por exemplo 05:30.");
                 return;
               }
-              sendCommand(command, parsed);
+              dispatchCommand(command, parsed);
               return;
             }
-            sendCommand(command);
+            dispatchCommand(command);
           });
         });
         const openMesasBtn = document.getElementById("dOpenMesas");
@@ -835,6 +867,10 @@ function resetTournamentData() {
   state.elapsedSeconds = 0;
   state.lastStartTs = null;
   state.levelEndTs = null;
+  state.tableAssignmentEvent = null;
+  state.transferEvents = [];
+  state.tournamentStartEvent = null;
+  state.finalTableEvent = null;
 }
 
 function applyConfigData(data) {
@@ -875,10 +911,15 @@ function applyConfigData(data) {
   state.lastStartTs = null;
   state.levelEndTs = null;
   state.players = [];
+  state.tableAssignmentEvent = null;
+  state.transferEvents = [];
+  state.tournamentStartEvent = null;
+  state.finalTableEvent = null;
   initializeFormValues();
   renderLevels();
   renderPlayers();
   renderRebuyList();
+  renderEvents();
   updateSummary();
   updateClockDisplay();
   saveState();
@@ -932,6 +973,21 @@ function formatTime(seconds) {
   const mins = String(Math.floor(seconds / 60)).padStart(2, "0");
   const secs = String(seconds % 60).padStart(2, "0");
   return `${mins}:${secs}`;
+}
+
+/** Captura o contexto atual do torneio (mesa, rodada, tempo) para registrar eventos de rebuy/addon. */
+function captureEventContext(player) {
+  if (typeof computeSecondsRemainingFromClock === "function") computeSecondsRemainingFromClock();
+  const level = state.levels[state.currentLevelIndex];
+  const levelDuration = level ? level.duration : 0;
+  const secondsRemaining = typeof state.secondsRemaining === "number" ? state.secondsRemaining : 0;
+  return {
+    tableNumber: player ? player.tableNumber : null,
+    level: state.currentLevelIndex + 1,
+    levelDuration,
+    secondsRemaining,
+    timestamp: Date.now(),
+  };
 }
 
 function parseTimeString(value) {
@@ -1152,8 +1208,16 @@ function computeSecondsRemainingFromClock() {
   return remaining;
 }
 
+function formatStartTime(ts) {
+  if (!ts) return "--:--";
+  return new Date(ts).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+
 function updateClockDisplay() {
   computeSecondsRemainingFromClock();
+  if (elements.clockStartTime) {
+    elements.clockStartTime.textContent = formatStartTime(state.tournamentStartTs);
+  }
   const level = state.levels[state.currentLevelIndex];
   if (!level) {
     elements.clockLevel.textContent = "-";
@@ -1209,6 +1273,46 @@ function resetTournamentClock() {
   saveState();
 }
 
+function restartTournament() {
+  const confirmed = window.confirm(
+    "Reiniciar o torneio? O cronômetro, rodada, rebuys, add-ons, mesas e eventos serao zerados. Participantes e configuracoes serao mantidos."
+  );
+  if (!confirmed) return;
+  pauseClock();
+  state.currentLevelIndex = 0;
+  state.secondsRemaining = state.levels[0]?.duration ? state.levels[0].duration * 60 : 0;
+  state.tournamentStartTs = null;
+  state.elapsedSeconds = 0;
+  state.lastStartTs = null;
+  state.levelEndTs = null;
+  state.tableChipAdjustments = {};
+  state.tableAssignmentEvent = null;
+  state.transferEvents = [];
+  state.tournamentStartEvent = null;
+  state.finalTableEvent = null;
+  (state.players || []).forEach((player) => {
+    player.rebuys = 0;
+    player.addons = 0;
+    player.rebuyEvents = [];
+    player.addonEvents = [];
+    player.eliminated = false;
+    player.eliminatedAt = null;
+    player.eliminatedLevel = null;
+    player.eliminatedRank = null;
+    player.tableNumber = null;
+    player.tableSeat = null;
+  });
+  renderLevels();
+  renderPlayers();
+  renderRebuyList();
+  renderEvents();
+  updateClockDisplay();
+  updateSummary();
+  updateStartTournamentButton();
+  saveState();
+  window.alert("Torneio reiniciado.");
+}
+
 function tickClock() {
   if (!state.clockRunning) return;
   state.secondsRemaining = Math.max(0, Math.ceil((state.levelEndTs - Date.now()) / 1000));
@@ -1231,6 +1335,13 @@ function startClock() {
   state.clockRunning = true;
   if (!state.tournamentStartTs) {
     state.tournamentStartTs = Date.now();
+    state.tournamentStartEvent = {
+      type: "tournament-start",
+      typeLabel: "Início do torneio",
+      timestamp: state.tournamentStartTs,
+    };
+    renderEvents();
+    updateClockDisplay();
   }
   state.lastStartTs = Date.now();
   state.levelEndTs = Date.now() + state.secondsRemaining * 1000;
@@ -1489,6 +1600,149 @@ function renderRebuyList() {
       </div>
     `;
     elements.rebuyList.appendChild(item);
+  });
+}
+
+function renderEvents() {
+  if (!elements.eventsList) return;
+  elements.eventsList.innerHTML = "";
+  const events = [];
+  if (state.tableAssignmentEvent) {
+    events.push(state.tableAssignmentEvent);
+  }
+  if (state.tournamentStartEvent) {
+    events.push(state.tournamentStartEvent);
+  } else if (state.tournamentStartTs) {
+    state.tournamentStartEvent = {
+      type: "tournament-start",
+      typeLabel: "Início do torneio",
+      timestamp: state.tournamentStartTs,
+    };
+    events.push(state.tournamentStartEvent);
+    saveState();
+  }
+  if (state.finalTableEvent) {
+    events.push(state.finalTableEvent);
+  }
+  (state.transferEvents || []).forEach((evt) => {
+    events.push({ ...evt, type: "transfer", typeLabel: "Transferência" });
+  });
+  (state.players || []).forEach((player) => {
+    (player.rebuyEvents || []).forEach((evt) => {
+      events.push({
+        type: "rebuy",
+        typeLabel: "Rebuy",
+        playerName: player.name,
+        tableNumber: evt.tableNumber,
+        level: evt.level,
+        levelDuration: evt.levelDuration,
+        secondsRemaining: evt.secondsRemaining,
+        timestamp: evt.timestamp,
+      });
+    });
+    (player.addonEvents || []).forEach((evt) => {
+      events.push({
+        type: "addon",
+        typeLabel: "Add-on",
+        playerName: player.name,
+        tableNumber: evt.tableNumber,
+        level: evt.level,
+        levelDuration: evt.levelDuration,
+        secondsRemaining: evt.secondsRemaining,
+        timestamp: evt.timestamp,
+      });
+    });
+    if (player.eliminated && player.eliminatedAt) {
+      events.push({
+        type: "eliminated",
+        typeLabel: "Eliminado",
+        playerName: player.name,
+        tableNumber: player.tableNumber,
+        level: player.eliminatedLevel,
+        levelDuration: null,
+        secondsRemaining: null,
+        timestamp: player.eliminatedAt,
+        rank: player.eliminatedRank,
+      });
+    }
+  });
+  events.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+  if (events.length === 0) {
+    elements.eventsList.innerHTML = `<span class="muted">Nenhum evento registrado ainda.</span>`;
+    return;
+  }
+  events.forEach((evt) => {
+    const item = document.createElement("div");
+    item.className = `row rebuy-row event-row event-${evt.type}`;
+    const hora = evt.timestamp
+      ? new Date(evt.timestamp).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+      : "--:--";
+    if (evt.type === "tables") {
+      item.innerHTML = `
+        <div class="rebuy-info">
+          <span class="pill event-pill event-pill-tables">${evt.typeLabel}</span>
+          <span class="muted">${evt.tablesSummary} · ${hora}</span>
+        </div>
+      `;
+    } else if (evt.type === "tournament-start") {
+      item.innerHTML = `
+        <div class="rebuy-info">
+          <span class="pill event-pill event-pill-tournament-start">${evt.typeLabel}</span>
+          <span class="muted">Horário: ${hora}</span>
+        </div>
+      `;
+    } else if (evt.type === "final-table") {
+      const rodada = evt.level != null ? String(evt.level) : "-";
+      const tempoRodada =
+        evt.secondsRemaining != null && evt.levelDuration != null
+          ? `${formatTime(evt.secondsRemaining)} restantes (${evt.levelDuration} min)`
+          : evt.levelDuration != null
+            ? `${evt.levelDuration} min`
+            : "-";
+      item.innerHTML = `
+        <div class="rebuy-info">
+          <span class="pill event-pill event-pill-final-table">${evt.typeLabel}</span>
+          <span class="muted">Rodada: ${rodada} · ${tempoRodada} · ${hora}</span>
+          <div class="muted" style="margin-top: 4px;">${evt.participantsSummary || "-"}</div>
+        </div>
+      `;
+    } else if (evt.type === "transfer") {
+      const mesaOrigem = evt.sourceTable != null ? formatTableLabel(evt.sourceTable) : "-";
+      const mesaDestino = evt.targetTable != null ? formatTableLabel(evt.targetTable) : "-";
+      const rodada = evt.level != null ? String(evt.level) : "-";
+      const fichas = evt.chips != null ? formatNumber(evt.chips) : "-";
+      const tempoRodada =
+        evt.secondsRemaining != null && evt.levelDuration != null
+          ? `${formatTime(evt.secondsRemaining)} restantes (${evt.levelDuration} min)`
+          : evt.levelDuration != null
+            ? `${evt.levelDuration} min`
+            : "-";
+      item.innerHTML = `
+        <div class="rebuy-info">
+          <span class="pill event-pill event-pill-transfer">${evt.typeLabel}</span>
+          <strong>${evt.playerName}</strong>
+          <span class="muted">${mesaOrigem} → ${mesaDestino} · ${fichas} fichas · Rodada: ${rodada} · ${tempoRodada} · ${hora}</span>
+        </div>
+      `;
+    } else {
+      const mesa = evt.tableNumber != null && evt.tableNumber !== "" ? formatTableLabel(evt.tableNumber) : "-";
+      const rodada = evt.level != null ? String(evt.level) : "-";
+      const tempoRodada =
+        evt.secondsRemaining != null && evt.levelDuration != null
+          ? `${formatTime(evt.secondsRemaining)} restantes (${evt.levelDuration} min)`
+          : evt.levelDuration != null
+            ? `${evt.levelDuration} min`
+            : "-";
+      const rankInfo = evt.rank ? ` · ${evt.rank}º lugar` : "";
+      item.innerHTML = `
+        <div class="rebuy-info">
+          <span class="pill event-pill event-pill-${evt.type}">${evt.typeLabel}</span>
+          <strong>${evt.playerName}</strong>
+          <span class="muted">Mesa: ${mesa} · Rodada: ${rodada} · ${tempoRodada} · ${hora}${rankInfo}</span>
+        </div>
+      `;
+    }
+    elements.eventsList.appendChild(item);
   });
 }
 
@@ -2027,6 +2281,8 @@ function addPlayer() {
     paid,
     rebuys: 0,
     addons: 0,
+    rebuyEvents: [],
+    addonEvents: [],
     eliminated: false,
     eliminatedAt: null,
     eliminatedLevel: null,
@@ -2085,6 +2341,9 @@ function setView(viewName) {
     if (elements.randomTables) elements.randomTables.classList.remove("btn-active");
     if (elements.viewTables) elements.viewTables.classList.remove("btn-active");
     if (elements.transferTables) elements.transferTables.classList.remove("btn-active");
+  }
+  if (viewName === "events") {
+    renderEvents();
   }
 }
 
@@ -2406,6 +2665,9 @@ function bindEvents() {
   }
 
 
+  if (elements.restartTournament) {
+    elements.restartTournament.addEventListener("click", restartTournament);
+  }
   if (elements.exportConfigAdmin) {
     elements.exportConfigAdmin.addEventListener("click", exportConfig);
   }
@@ -2434,6 +2696,8 @@ function bindEvents() {
               paid: false,
               rebuys: 0,
               addons: 0,
+              rebuyEvents: [],
+              addonEvents: [],
               eliminated: false,
               eliminatedAt: null,
               eliminatedLevel: null,
@@ -2577,6 +2841,7 @@ function bindEvents() {
       renderLevels();
       renderPlayers();
       renderRebuyList();
+      renderEvents();
       updateSummary();
       updateClockDisplay();
       setStarted(true);
@@ -2610,6 +2875,46 @@ function bindEvents() {
     });
   }
 
+  if (elements.startTournament) {
+    elements.startTournament.addEventListener("click", () => {
+      const activePlayers = state.players.filter((p) => !p.eliminated);
+      const playersWithoutTable = activePlayers.filter((p) => !(Number(p.tableNumber) > 0));
+      if (playersWithoutTable.length > 0) {
+        const names = playersWithoutTable.map((p) => p.name).join(", ");
+        window.alert(
+          `Os seguintes jogadores ainda não estão em nenhuma mesa:\n\n${names}\n\nPor favor, atribua todos os participantes às mesas antes de iniciar o torneio.`
+        );
+        return;
+      }
+      if (activePlayers.length === 0) {
+        window.alert("Não há participantes cadastrados. Adicione jogadores antes de iniciar o torneio.");
+        return;
+      }
+      const tablesMap = new Map();
+      state.players.forEach((p) => {
+        const tn = Number(p.tableNumber);
+        if (tn > 0) {
+          if (!tablesMap.has(tn)) tablesMap.set(tn, []);
+          tablesMap.get(tn).push(p.name);
+        }
+      });
+      const tablesSummary = Array.from(tablesMap.entries())
+        .sort((a, b) => (a[0] === 99 ? 999 : a[0]) - (b[0] === 99 ? 999 : b[0]))
+        .map(([num, names]) => `${formatTableLabel(num)}: ${names.join(", ")}`)
+        .join(" | ");
+      state.tableAssignmentEvent = {
+        type: "tables",
+        typeLabel: "Mesas definidas",
+        timestamp: Date.now(),
+        tablesSummary,
+      };
+      renderEvents();
+      updateStartTournamentButton();
+      saveState();
+      window.alert("Torneio Validado! Abra o Painel para exibir o torneio.");
+    });
+  }
+
   if (elements.openDisplay) {
     elements.openDisplay.addEventListener("click", openDisplayWindow);
   }
@@ -2623,18 +2928,26 @@ function bindEvents() {
     if (button.dataset.action === "rebuy-add") {
       if (state.rebuyLimit <= 0 || player.rebuys < state.rebuyLimit) {
         player.rebuys += 1;
+        (player.rebuyEvents = player.rebuyEvents || []).push({ ...captureEventContext(player), playerName: player.name, playerId: player.id });
       }
     }
     if (button.dataset.action === "rebuy-remove") {
-      if (player.rebuys > 0) player.rebuys -= 1;
+      if (player.rebuys > 0) {
+        player.rebuys -= 1;
+        if (Array.isArray(player.rebuyEvents) && player.rebuyEvents.length > 0) player.rebuyEvents.pop();
+      }
     }
     if (button.dataset.action === "addon-add") {
       if (state.addonLimit <= 0 || player.addons < state.addonLimit) {
         player.addons += 1;
+        (player.addonEvents = player.addonEvents || []).push({ ...captureEventContext(player), playerName: player.name, playerId: player.id });
       }
     }
     if (button.dataset.action === "addon-remove") {
-      if (player.addons > 0) player.addons -= 1;
+      if (player.addons > 0) {
+        player.addons -= 1;
+        if (Array.isArray(player.addonEvents) && player.addonEvents.length > 0) player.addonEvents.pop();
+      }
     }
     if (button.dataset.action === "edit") {
       state.editingPlayerId = player.id;
@@ -2655,6 +2968,7 @@ function bindEvents() {
     }
     renderPlayers();
     renderRebuyList();
+    renderEvents();
     renderPayouts();
     updateSummary();
     saveState();
@@ -2696,18 +3010,26 @@ function bindEvents() {
       if (button.dataset.action === "rebuy-add" && !isEliminated) {
         if (state.rebuyLimit <= 0 || player.rebuys < state.rebuyLimit) {
           player.rebuys += 1;
+          (player.rebuyEvents = player.rebuyEvents || []).push({ ...captureEventContext(player), playerName: player.name, playerId: player.id });
         }
       }
       if (button.dataset.action === "rebuy-remove") {
-        if (player.rebuys > 0) player.rebuys -= 1;
+        if (player.rebuys > 0) {
+          player.rebuys -= 1;
+          if (Array.isArray(player.rebuyEvents) && player.rebuyEvents.length > 0) player.rebuyEvents.pop();
+        }
       }
       if (button.dataset.action === "addon-add" && !isEliminated) {
         if (state.addonLimit <= 0 || player.addons < state.addonLimit) {
           player.addons += 1;
+          (player.addonEvents = player.addonEvents || []).push({ ...captureEventContext(player), playerName: player.name, playerId: player.id });
         }
       }
       if (button.dataset.action === "addon-remove") {
-        if (player.addons > 0) player.addons -= 1;
+        if (player.addons > 0) {
+          player.addons -= 1;
+          if (Array.isArray(player.addonEvents) && player.addonEvents.length > 0) player.addonEvents.pop();
+        }
       }
       if (button.dataset.action === "eliminate" && !isEliminated) {
         player.eliminated = true;
@@ -2719,6 +3041,7 @@ function bindEvents() {
       }
       renderPlayers();
       renderRebuyList();
+      renderEvents();
       renderPayouts();
       updateSummary();
       saveState();
@@ -3005,8 +3328,23 @@ function bindEvents() {
         player.tableNumber = 99;
         player.tableSeat = index + 1;
       });
+      if (typeof computeSecondsRemainingFromClock === "function") computeSecondsRemainingFromClock();
+      const level = state.levels[state.currentLevelIndex];
+      const levelDuration = level ? level.duration : 0;
+      const secondsRemaining = typeof state.secondsRemaining === "number" ? state.secondsRemaining : 0;
+      const participantsSummary = finalPlayers.map((p) => p.name).join(", ");
+      state.finalTableEvent = {
+        type: "final-table",
+        typeLabel: "Mesa Final",
+        level: state.currentLevelIndex + 1,
+        levelDuration,
+        secondsRemaining,
+        timestamp: Date.now(),
+        participantsSummary,
+      };
       renderPlayers();
       renderRebuyList();
+      renderEvents();
       renderTablesList();
       saveState();
     });
@@ -3085,11 +3423,26 @@ function bindEvents() {
       adjustments[sourceTable] = Number(adjustments[sourceTable] || 0) + (basePlayerChips - amount);
       adjustments[tableNumber] = Number(adjustments[tableNumber] || 0) + (amount - basePlayerChips);
       state.tableChipAdjustments = adjustments;
+      if (typeof computeSecondsRemainingFromClock === "function") computeSecondsRemainingFromClock();
+      const level = state.levels[state.currentLevelIndex];
+      const levelDuration = level ? level.duration : 0;
+      const secondsRemaining = typeof state.secondsRemaining === "number" ? state.secondsRemaining : 0;
+      (state.transferEvents = state.transferEvents || []).push({
+        playerName: player.name,
+        sourceTable,
+        targetTable: tableNumber,
+        chips: amount,
+        level: state.currentLevelIndex + 1,
+        levelDuration,
+        secondsRemaining,
+        timestamp: Date.now(),
+      });
       player.tableNumber = tableNumber;
       player.tableSeat = null;
       if (chipsInput) chipsInput.classList.add("hidden");
       if (select) select.classList.add("hidden");
       if (button) button.classList.add("hidden");
+      renderEvents();
       renderPlayers();
       renderRebuyList();
       renderTablesList();
@@ -3340,6 +3693,7 @@ function init() {
   renderStaticHistory();
   updateSummary();
   bindEvents();
+  window.handleCommand = handleCommand;
   window.addEventListener("storage", (event) => {
     if (event.key !== COMMAND_KEY || !event.newValue) return;
     try {
